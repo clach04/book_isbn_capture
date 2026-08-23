@@ -108,7 +108,7 @@
 
 <script>
 'use strict';
-const APP_VERSION = 'v0.0.11 (2026-08-23) - on-screen configurable silence timeout';
+const APP_VERSION = 'v0.0.12 (2026-08-23) - removed hallucination phrase filter';
 document.getElementById('version').textContent = APP_VERSION;
 
 
@@ -393,11 +393,6 @@ if (!SR) {
     utterance = '';
     if (!text) return;
     transcriptEl.textContent = `\u201c${text}\u201d`;
-    if (isHallucination(text)) {
-      setStatus('Mic picked up no clear speech \u2014 check mic device/mute, speak closer.', false);
-      errorCue();
-      return;
-    }
     const parsed = parseUtterance(text);
     if (parsed) {
       addCapture(parsed.isbn, parsed.note);
@@ -444,9 +439,6 @@ if (!SR) {
     }
     errorCue();
   };
-  // Chrome hallucinates phrases like "FedEx in a nutshell" on silence/noise.
-  const HALLUCINATIONS = [/fedex/i, /thank you/i, /please try again/i];
-  const isHallucination = t => !/\d/.test(t) && HALLUCINATIONS.some(re => re.test(t));
   rec.onend = () => {
     listening = false;
     clearTimeout(silenceTimer);
