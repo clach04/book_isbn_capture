@@ -57,7 +57,11 @@ Tips:
   retried via the **Fetch titles** button. Each row links to
   <https://isbnsearch.org/isbn/…> for a quick manual detail check, and to
   archive.org (`https://archive.org/search?query=isbn%3A…`) for Internet
-  Archive availability/lending
+  Archive availability/lending. The app also checks whether the Internet
+  Archive **wants** the book as a donation (via
+  `archive.org/want/?id=…&mode=donation_book`, fetched through a public CORS
+  proxy): ❌ = they don't need it, ✅ = wanted, ❓ = unknown/not yet checked.
+  CSV gains a `want` column (`yes`/`no`/`?`).
 - **Copy all** puts newline-delimited ISBN-13s on the clipboard; **Export CSV**
   downloads `isbn_entered,isbn10,isbn13,title,authors,lookup,note,timestamp`.
   Both clear the "not yet exported" nag.

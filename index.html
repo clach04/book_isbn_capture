@@ -134,7 +134,7 @@
 
 <script>
 'use strict';
-const APP_VERSION = 'v0.0.22 (2026-08-23) - auto-fetch title for captures added after load'
+const APP_VERSION = 'v0.0.23 (2026-08-23) - archive.org donation-want check (emoji badge per row, want column in CSV)'
 document.getElementById('version').textContent = APP_VERSION;
 
 
@@ -401,6 +401,19 @@ function render() {
     const row2 = document.createElement('div');
     row2.className = 'row';
     if (cap.isbn13) {
+      const want = document.createElement('span');
+      want.style.cursor = 'help';
+      if (cap.want === 'no') {
+        want.textContent = '\u274c';
+        want.title = "archive.org: we don't need this book";
+      } else if (cap.want === 'yes') {
+        want.textContent = '\u2705';
+        want.title = 'archive.org: they need this book';
+      } else {
+        want.textContent = '\u2753';
+        want.title = cap.want === '?' ? 'archive.org want-status unknown' : 'want-status not checked yet';
+      }
+      row2.append(want);
       const arch = document.createElement('a');
       arch.className = 'archive';
       arch.href = 'https://isbnsearch.org/isbn/' + cap.isbn13;
@@ -470,11 +483,23 @@ function addCapture(raw, note) {
   return true;
 }
 
-// ---------- Title lookup (Open Library) ----------
-// Records carry `title`, `authors` (string), and `lookup` ('found' |
-// 'not-found' | undefined = pending). Missing fields on old records mean
-// pending — no explicit migration needed.
+// ---------- Title + want lookups (Open Library / archive.org) ----------
+// Records carry `title`, `authors`, `lookup` ('found'|'not-found'|undefined),
+// and `want` ('yes'|'no'|'?'=checked-unknown|undefined=pending).
+// Missing fields on old records mean pending — no explicit migration needed.
+//
+// archive.org's /want/ page has no CORS headers and no JSON form, so it is
+// fetched through a public CORS proxy; failures degrade to '?' and are
+// retried by the "Fetch titles" button.
 let lookupAbort = false;
+const WANT_URL = isbn13 =>
+  'https://archive.org/want/?id=' + isbn13 + '&mode=donation_book';
+// Public CORS proxies, tried in order — archive.org /want/ sends no CORS
+// headers itself. All failing degrades the record to '?'.
+const WANT_PROXIES = [
+  url => 'https://api.allorigins.win/raw?url=' + encodeURIComponent(url),
+  url => 'https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(url),
+];
 async function lookupTitle(isbn13) {
   const url = 'https://openlibrary.org/api/books?bibkeys=ISBN:' + isbn13 +
     '&format=json&jscmd=data';
@@ -489,55 +514,94 @@ async function lookupTitle(isbn13) {
       ? rec.authors.map(a => a.name).join(', ') : ''
   };
 }
+// Returns 'yes' | 'no' | '?' (page fetched but verdict unrecognized);
+// throws on network/proxy failure so the caller can retry later.
+async function lookupWant(isbn13) {
+  const target = WANT_URL(isbn13);
+  let html = null;
+  // The /want/ page is slow and public proxies time out often (~1 in 3
+  // succeeds); retry each proxy list twice before giving up.
+  outer:
+  for (let round = 0; round < 2 && html === null; round++) {
+    for (const wrap of WANT_PROXIES) {
+      try {
+        const res = await fetch(wrap(target));
+        if (!res.ok) continue;
+        html = await res.text();
+        break outer;
+      } catch { /* try next */ }
+    }
+    if (round === 0 && html === null) await new Promise(r => setTimeout(r, 1000));
+  }
+  if (html === null) throw new Error('all want-proxies failed');
+  const m = html.match(/id='response'[^>]*>([^<]*)</i);
+  if (!m) throw new Error('unexpected /want/ page');
+  const t = m[1].toLowerCase();
+  if (/don.?t need|do not need/.test(t)) return 'no';
+  if (/\bneed\b/.test(t)) return 'yes';
+  return '?';
+}
 function pendingLookups() {
-  return captures.filter(c => c.isbn13 && c.lookup === undefined && !c.title);
+  return captures.filter(c => c.isbn13 && (
+    (!c.title && c.lookup === undefined) || c.want === undefined));
 }
 let lookupRunning = false;
 let lookupStatus = '';   // '' | 'running' | 'failed' — shown in the list header
 async function runLookupQueue() {
   if (lookupRunning || lookupAbort) return;
   lookupRunning = true;
-  let found = 0, missed = 0;
+  let found = 0, missed = 0, wanted = 0, unwanted = 0;
   try {
     while (!lookupAbort) {
       const queue = pendingLookups();
       if (queue.length === 0) break;
       lookupStatus = 'running';
-      setStatus(`Fetching titles\u2026 ${queue.length} left`, true);
+      setStatus(`Fetching titles/want-status\u2026 ${queue.length} left`, true);
       render();
       const cap = queue[0];
       try {
-        const meta = await lookupTitle(cap.isbn13);
-        if (meta) {
-          cap.title = meta.title;
-          cap.authors = meta.authors;
-          cap.lookup = 'found';
-          found++;
-        } else {
-          cap.lookup = 'not-found';
-          missed++;
+        if (!cap.title && cap.lookup === undefined) {
+          const meta = await lookupTitle(cap.isbn13);
+          if (meta) {
+            cap.title = meta.title;
+            cap.authors = meta.authors;
+            cap.lookup = 'found';
+            found++;
+          } else {
+            cap.lookup = 'not-found';
+            missed++;
+          }
+        }
+        if (cap.want === undefined) {
+          const w = await lookupWant(cap.isbn13);
+          cap.want = w;
+          if (w === 'yes') wanted++; else if (w === 'no') unwanted++;
         }
       } catch {
         // network/API failure: leave ALL pending for the next attempt
         lookupStatus = 'failed';
-        setStatus(`Title lookup failed (network?) \u2014 ${queue.length} still pending; try \u201cFetch titles\u201d.`, false);
+        setStatus(`Lookup failed (network/proxy?) \u2014 ${queue.length} still pending; try \u201cFetch titles\u201d.`, false);
         return;   // finally still resets lookupRunning
       }
       saveCaptures();
       render();
-      await new Promise(r => setTimeout(r, 300)); // be polite to Open Library
+      await new Promise(r => setTimeout(r, 300)); // be polite
     }
     lookupStatus = '';
-    if (found || missed) {
-      setStatus(`Titles: ${found} found${missed ? ', ' + missed + ' not in Open Library' : ''}.`, true);
-    }
+    const parts = [];
+    if (found || missed) parts.push(`titles: ${found} found${missed ? ', ' + missed + ' not in Open Library' : ''}`);
+    if (wanted || unwanted) parts.push(`archive.org: ${wanted} wanted, ${unwanted} unwanted`);
+    if (parts.length) setStatus(parts.join(' \u2014 ') + '.', true);
   } finally {
     lookupRunning = false;
     render();
   }
 }
 function retryNotFounds() {
-  for (const c of captures) if (c.lookup === 'not-found') c.lookup = undefined;
+  for (const c of captures) {
+    if (c.lookup === 'not-found') c.lookup = undefined;
+    if (c.want === '?') c.want = undefined;   // re-check unknowns too
+  }
   saveCaptures();
 }
 fetchTitlesBtn.addEventListener('click', () => {
@@ -581,9 +645,9 @@ copyBtn.addEventListener('click', async () => {
   }
 });
 csvBtn.addEventListener('click', () => {
-  const rows = ['isbn_entered,isbn10,isbn13,title,authors,lookup,note,timestamp',
+  const rows = ['isbn_entered,isbn10,isbn13,title,authors,want,lookup,note,timestamp',
     ...captures.map(c => [c.display, c.isbn10, c.isbn13,
-      c.title || '', c.authors || '', c.lookup || '',
+      c.title || '', c.authors || '', c.want || '?', c.lookup || '',
       `"${(c.note || '').replace(/"/g, '""')}"`, new Date(c.ts).toISOString()].join(','))];
   const blob = new Blob([rows.join('\n')], { type: 'text/csv' });
   const a = document.createElement('a');
