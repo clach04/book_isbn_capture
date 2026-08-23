@@ -2,9 +2,14 @@
 
 Voice-first ISBN capture tool for cataloguing physical books. Speak the ISBN
 (and optionally a description), it validates locally via checksum and builds an
-exportable list for archive.org / Open Library workflows.
+exportable list for archive.org / Open Library workflows. Supports typing/copy+paste
+and camera capture of barcodes.
 
 Pure static HTML+JS — one file, no dependencies, no backend.
+
+Can be used for simple cataloging to CSV for import or sanity checking.
+Primary use case for this app was to check https://archive.org/want/?mode=donation_book
+to see if any books are missing from Archive.org collection.
 
 ## Launch for local testing
 
@@ -82,18 +87,25 @@ Tips:
 
 https://isbnsearch.org/isbn/9780131101630
 
-  ISBN-13: 9780131101630
-  ISBN-10: 0131101633
-  ISBN-10: 01 31 10 16 33
+    ISBN-13: 9780131101630
+    ISBN-10: 0131101633
+    ISBN-10: 01 31 10 16 33
 
+### Gunship 2000 The Official Strategy Guide
+
+https://isbnsearch.org/isbn/9781559582445
+
+    ISBN-13: 9781559582445
+    ISBN-10: 1559582448
+    ISBN-10: 1 55 95 82 44 8
 
 ### Linux in a Nutshell (In a Nutshell (O'Reilly))
 
 https://isbnsearch.org/isbn/9781565925854
 
-  ISBN-13: 9781565925854
-  ISBN-10: 1565925858
-  ISBN-10: 1 56 59 25 85 8
+    ISBN-13: 9781565925854
+    ISBN-10: 1565925858
+    ISBN-10: 1 56 59 25 85 8
 
 ## Notes
 
