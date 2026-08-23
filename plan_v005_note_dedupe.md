@@ -38,6 +38,12 @@ for now.
 
 Validation target: all 3 fixtures must reduce to their "want" strings.
 
+## Verification
+
+2026-08-23: mobile test confirmed fixture-3-style capture ("1984 first edition"
++ growing ISBN-prefix garbage) is cleaned correctly on-device by cleanNote().
+Heuristic validated end-to-end, not just in unit tests.
+
 ## Steps
 
 1. Promote the 3 samples to permanent test fixtures (raw note + expected
