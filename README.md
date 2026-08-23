@@ -46,6 +46,11 @@ Tips:
 - Some older ISBN-10s end in the letter **X** (~1 in 11): say "...six **ex**"
   or type them in the manual field
 - Each row can be deleted (×) or have its digits fixed by tapping the ISBN
+- **Titles** are fetched automatically from Open Library (free, keyless) for
+  captured ISBNs and shown under each entry with authors; "not found" entries
+  can be retried via the **Fetch titles** button. Each row links to
+  <https://archive.org/search?query=isbn%3A…> to check Internet Archive
+  availability/lending
 - **Copy all** puts newline-delimited ISBN-13s on the clipboard; **Export CSV**
   downloads `isbn_entered,isbn10,isbn13,note,timestamp`. Both clear the "not
   yet exported" nag.

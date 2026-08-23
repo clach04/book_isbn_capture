@@ -42,6 +42,17 @@
   #list .isbn { font-family: monospace; font-size: 1.05rem; }
   #list .note { color: #aaa; font-size: 0.85rem; flex: 1; overflow: hidden;
     text-overflow: ellipsis; white-space: nowrap; }
+  #list .meta { flex: 1; min-width: 0; display: flex;
+    flex-direction: column; gap: 0.15rem; }
+  #list .meta .row { display: flex; align-items: center; gap: 0.5rem; }
+  #list .titleline { font-size: 0.9rem; color: #ddd; overflow: hidden;
+    text-overflow: ellipsis; white-space: nowrap; }
+  #list .titleline .authors { color: #999; }
+  #list .titleline.pending { color: #666; font-style: italic; }
+  #list a.archive {
+    color: #7dd3fc; text-decoration: none; font-size: 0.8rem;
+    white-space: nowrap;
+  }
   #list .del {
     background: none; border: none; color: #f87171; font-size: 1.1rem;
     cursor: pointer; padding: 0.25rem 0.5rem;
@@ -115,12 +126,15 @@
   <button id="copyBtn">Copy all</button>
   <button id="csvBtn">Export CSV</button>
 </div>
+<div class="controls">
+  <button id="fetchTitlesBtn">Fetch titles</button>
+</div>
 
 <div id="version" style="text-align:center;color:#666;font-size:0.75rem;margin-top:1rem"></div>
 
 <script>
 'use strict';
-const APP_VERSION = 'v0.0.18 (2026-08-23) - camera barcode scanning (BarcodeDetector, auto-capture)';;
+const APP_VERSION = 'v0.0.19 (2026-08-23) - ISBN metadata lookup (Open Library) + archive.org links';
 document.getElementById('version').textContent = APP_VERSION;
 
 
@@ -306,6 +320,7 @@ const manualInput = document.getElementById('manualInput');
 const copyBtn = document.getElementById('copyBtn');
 const csvBtn = document.getElementById('csvBtn');
 const silenceSec = document.getElementById('silenceSec');
+const fetchTitlesBtn = document.getElementById('fetchTitlesBtn');
 const SILENCE_KEY = 'isbn-silence-sec';
 silenceSec.value = localStorage.getItem(SILENCE_KEY) || '3';
 function silenceMs() {
@@ -359,6 +374,40 @@ function render() {
       isbn.replaceWith(input);
       input.focus();
     });
+    const meta = document.createElement('div');
+    meta.className = 'meta';
+    const row1 = document.createElement('div');
+    row1.className = 'row';
+    row1.append(isbn);
+    const titleLine = document.createElement('span');
+    titleLine.className = 'titleline';
+    if (cap.title) {
+      titleLine.textContent = cap.title + (cap.authors ? ' \u2014 ' : '');
+      if (cap.authors) {
+        const au = document.createElement('span');
+        au.className = 'authors';
+        au.textContent = cap.authors;
+        titleLine.appendChild(au);
+      }
+      titleLine.title = cap.title + (cap.authors ? '\n' + cap.authors : '') + '\n(via Open Library)';
+    } else if (cap.lookup === 'not-found') {
+      titleLine.textContent = 'not found in Open Library';
+      titleLine.classList.add('pending');
+    } else if (cap.isbn13) {
+      titleLine.textContent = 'looking up title\u2026';
+      titleLine.classList.add('pending');
+    }
+    const row2 = document.createElement('div');
+    row2.className = 'row';
+    if (cap.isbn13) {
+      const arch = document.createElement('a');
+      arch.className = 'archive';
+      arch.href = 'https://archive.org/search?query=isbn%3A' + cap.isbn13;
+      arch.target = '_blank';
+      arch.rel = 'noopener';
+      arch.textContent = '\u21d7 archive.org';
+      row2.append(arch);
+    }
     const note = document.createElement('span');
     note.className = 'note';
     note.textContent = cap.note || '\u2014';
@@ -368,7 +417,7 @@ function render() {
     note.addEventListener('click', () => {
       const input = document.createElement('input');
       input.value = cap.note;
-      input.style.cssText = 'flex:1;min-width:0;background:#000;color:#eee;border:1px solid #555;border-radius:4px;padding:0.2rem;font-size:0.85rem;';
+      input.style.cssText = 'min-width:0;background:#000;color:#eee;border:1px solid #555;border-radius:4px;padding:0.2rem;font-size:0.85rem;width:' + Math.max(6, note.clientWidth / 7) + 'em;';
       input.placeholder = 'note (description, condition\u2026)';
       input.addEventListener('keydown', e => { if (e.key === 'Enter') input.blur(); });
       input.addEventListener('blur', () => {
@@ -378,6 +427,8 @@ function render() {
       note.replaceWith(input);
       input.focus();
     });
+    row2.append(note);
+    meta.append(row1, row2);
     const del = document.createElement('button');
     del.className = 'del';
     del.textContent = '\u00d7';
@@ -386,10 +437,12 @@ function render() {
       captures.splice(i, 1);
       saveCaptures(); render(); updateNag();
     });
-    li.append(isbn, note, del);
+    li.append(meta, del);
     listEl.appendChild(li);
   }
   copyBtn.disabled = csvBtn.disabled = captures.length === 0;
+  const needsFetch = captures.some(c => c.isbn13 && (c.lookup === undefined || c.lookup === 'not-found'));
+  fetchTitlesBtn.disabled = !needsFetch;
   updateNag();
 }
 
@@ -407,6 +460,70 @@ function addCapture(raw, note) {
   saveCaptures(); render();
   return true;
 }
+
+// ---------- Title lookup (Open Library) ----------
+// Records carry `title`, `authors` (string), and `lookup` ('found' |
+// 'not-found' | undefined = pending). Missing fields on old records mean
+// pending — no explicit migration needed.
+let lookupAbort = false;
+async function lookupTitle(isbn13) {
+  const url = 'https://openlibrary.org/api/books?bibkeys=ISBN:' + isbn13 +
+    '&format=json&jscmd=data';
+  const res = await fetch(url);
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  const data = await res.json();
+  const rec = data['ISBN:' + isbn13];
+  if (!rec || !rec.title) return null;
+  return {
+    title: String(rec.title),
+    authors: Array.isArray(rec.authors)
+      ? rec.authors.map(a => a.name).join(', ') : ''
+  };
+}
+function pendingLookups() {
+  return captures.filter(c => c.isbn13 && c.lookup === undefined && !c.title);
+}
+let lookupRunning = false;
+async function runLookupQueue() {
+  if (lookupRunning || lookupAbort) return;
+  lookupRunning = true;
+  try {
+    while (!lookupAbort) {
+      const queue = pendingLookups();
+      if (queue.length === 0) break;
+      const cap = queue[0];
+      try {
+        const meta = await lookupTitle(cap.isbn13);
+        if (meta) {
+          cap.title = meta.title;
+          cap.authors = meta.authors;
+          cap.lookup = 'found';
+        } else {
+          cap.lookup = 'not-found';
+        }
+      } catch {
+        // network/API failure: leave pending for the next attempt
+        break;
+      }
+      saveCaptures();
+      render();
+      await new Promise(r => setTimeout(r, 300)); // be polite to Open Library
+    }
+  } finally {
+    lookupRunning = false;
+  }
+}
+function retryNotFounds() {
+  for (const c of captures) if (c.lookup === 'not-found') c.lookup = undefined;
+  saveCaptures();
+}
+fetchTitlesBtn.addEventListener('click', () => {
+  retryNotFounds();
+  setStatus('Fetching titles…', true);
+  lookupAbort = false;
+  runLookupQueue();
+});
+window.addEventListener('online', () => { lookupAbort = false; runLookupQueue(); });
 
 // ---------- Manual entry ----------
 manualForm.addEventListener('submit', e => {
@@ -543,6 +660,8 @@ if (!SR) {
 }
 
 render();
+lookupAbort = false;
+runLookupQueue();   // auto-fetch missing titles on load
 // ---------- Camera barcode scanning (Chrome/Android) ----------
 const scanBtn = document.getElementById('scanBtn');
 const scanView = document.getElementById('scanView');
