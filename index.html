@@ -134,7 +134,7 @@
 
 <script>
 'use strict';
-const APP_VERSION = 'v0.0.20 (2026-08-23) - fix title display, isbnsearch.org links, visible lookup progress';
+const APP_VERSION = 'v0.0.21 (2026-08-23) - CSV gains title/authors/lookup columns; both detail + archive.org links per row'
 document.getElementById('version').textContent = APP_VERSION;
 
 
@@ -407,6 +407,13 @@ function render() {
       arch.rel = 'noopener';
       arch.textContent = '\u21d7 details';
       row2.append(arch);
+      const ia = document.createElement('a');
+      ia.className = 'archive';
+      ia.href = 'https://archive.org/search?query=isbn%3A' + cap.isbn13;
+      ia.target = '_blank';
+      ia.rel = 'noopener';
+      ia.textContent = '\u21d7 archive.org';
+      row2.append(ia);
     }
     const note = document.createElement('span');
     note.className = 'note';
@@ -572,8 +579,9 @@ copyBtn.addEventListener('click', async () => {
   }
 });
 csvBtn.addEventListener('click', () => {
-  const rows = ['isbn_entered,isbn10,isbn13,note,timestamp',
+  const rows = ['isbn_entered,isbn10,isbn13,title,authors,lookup,note,timestamp',
     ...captures.map(c => [c.display, c.isbn10, c.isbn13,
+      c.title || '', c.authors || '', c.lookup || '',
       `"${(c.note || '').replace(/"/g, '""')}"`, new Date(c.ts).toISOString()].join(','))];
   const blob = new Blob([rows.join('\n')], { type: 'text/csv' });
   const a = document.createElement('a');

@@ -50,10 +50,12 @@ Tips:
   captured ISBNs (looked up via canonical ISBN-13, whatever form you spoke or
   typed) and shown under each entry with authors; "not found" entries can be
   retried via the **Fetch titles** button. Each row links to
-  <https://isbnsearch.org/isbn/…> for a quick manual detail check
+  <https://isbnsearch.org/isbn/…> for a quick manual detail check, and to
+  archive.org (`https://archive.org/search?query=isbn%3A…`) for Internet
+  Archive availability/lending
 - **Copy all** puts newline-delimited ISBN-13s on the clipboard; **Export CSV**
-  downloads `isbn_entered,isbn10,isbn13,note,timestamp`. Both clear the "not
-  yet exported" nag.
+  downloads `isbn_entered,isbn10,isbn13,title,authors,lookup,note,timestamp`.
+  Both clear the "not yet exported" nag.
 
 ## Notes
 
