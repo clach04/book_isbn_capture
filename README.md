@@ -35,15 +35,20 @@ For phone use, deploy to any static HTTPS host (e.g. GitHub Pages); LAN-IP HTTP
 
 Tips:
 
-- Both **ISBN-10** and **ISBN-13** accepted; everything is stored/converted to
-  ISBN-13 internally
+- Both **ISBN-10** and **ISBN-13** accepted. Each capture keeps the form you
+  entered (`display`) plus derived `isbn10`/`isbn13` fields. A 978-prefixed
+  ISBN-13 converts both ways; **979**-prefixed ones have no ISBN-10 equivalent
+  (that column stays empty)
+- Capturing a book twice (even once as ISBN-10 and once as ISBN-13) is
+  detected via the canonical ISBN-13 and skipped
 - A single dropped digit is repaired deterministically via the checksum
   (status warns "repaired — verify!")
 - Some older ISBN-10s end in the letter **X** (~1 in 11): say "...six **ex**"
   or type them in the manual field
 - Each row can be deleted (×) or have its digits fixed by tapping the ISBN
-- **Copy all** puts newline-delimited ISBNs on the clipboard; **Export CSV**
-  downloads `isbn,note,timestamp`. Both clear the "not yet exported" nag.
+- **Copy all** puts newline-delimited ISBN-13s on the clipboard; **Export CSV**
+  downloads `isbn_entered,isbn10,isbn13,note,timestamp`. Both clear the "not
+  yet exported" nag.
 
 ## Notes
 
