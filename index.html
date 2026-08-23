@@ -101,7 +101,7 @@
 
 <script>
 'use strict';
-const APP_VERSION = 'v0.0.4 (2026-08-23) \u2014 reverted pending-note experiment';
+const APP_VERSION = 'v0.0.5 (2026-08-23) 2014 no-speech handling + hallucination filter';
 document.getElementById('version').textContent = APP_VERSION;
 
 
@@ -329,6 +329,11 @@ if (!SR) {
   rec.onresult = e => {
     const text = e.results[0][0].transcript;
     transcriptEl.textContent = `\u201c${text}\u201d`;
+    if (isHallucination(text)) {
+      setStatus('Mic picked up no clear speech \u2014 check mic device/mute, speak closer.', false);
+      errorCue();
+      return;
+    }
     const parsed = parseUtterance(text);
     if (parsed) {
       addCapture(parsed.isbn, parsed.note);
@@ -340,9 +345,16 @@ if (!SR) {
     }
   };
   rec.onerror = e => {
-    setStatus(`Mic error: ${e.error}`, false);
+    if (e.error === 'no-speech') {
+      setStatus('Heard nothing \u2014 check mic device/mute, then tap & speak again.', false);
+    } else {
+      setStatus(`Mic error: ${e.error}`, false);
+    }
     errorCue();
   };
+  // Chrome hallucinates phrases like "FedEx in a nutshell" on silence/noise.
+  const HALLUCINATIONS = [/fedex/i, /thank you/i, /please try again/i];
+  const isHallucination = t => !/\d/.test(t) && HALLUCINATIONS.some(re => re.test(t));
   rec.onend = () => {
     talkBtn.classList.remove('listening');
     talkBtn.innerHTML = '&#127908; Tap &amp; speak ISBN';
