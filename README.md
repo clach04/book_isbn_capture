@@ -87,3 +87,10 @@ https://isbnsearch.org/isbn/9781565925854
   ISBN-13: 9781565925854
   ISBN-10: 1565925858
   ISBN-10: 1 56 59 25 85 8
+
+## Notes
+
+This is an experiment with stealth/ox-alpha and pi.dev
+using Matt Pocock's grill-with-docs skill:
+
+> I want a tool that can take in ISBN numbers, then look up the title, and/or make it easy to check with archive.org if they have the books in the collection already or want them to be donated. I'm thinking either something that runs on desktop or pure html+js that can be hosted on a webserver then used from a phone. I want an easy way to get ISBN numbers from the book into the app. I'm thinking voice to text might be faster than using a camera phone. Help be figure out least hassle way for a human to enter in ISBN numbers. I want to support typing/copy+paste but thinking voice would likely be the prime way in. I want to minimize button presses on the phone, which is why I'm thinking NOT using the phones built in keyboard with voice-to-text is not a good idea. We could try that out though with version one that takes keyboard input
