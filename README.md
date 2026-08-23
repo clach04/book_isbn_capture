@@ -54,7 +54,9 @@ Tips:
 - **Titles** are fetched automatically from Open Library (free, keyless) for
   captured ISBNs (looked up via canonical ISBN-13, whatever form you spoke or
   typed) and shown under each entry with authors; "not found" entries can be
-  retried via the **Fetch titles** button. Each row links to
+  retried via the **Fetch missing data** button (which also re-checks unknown
+  want statuses). Lookups run automatically when a capture is created, never
+  on page load. Each row links to
   <https://isbnsearch.org/isbn/…> for a quick manual detail check, and to
   archive.org (`https://archive.org/search?query=isbn%3A…`) for Internet
   Archive availability/lending. The app also checks whether the Internet
@@ -62,9 +64,14 @@ Tips:
   `archive.org/want/?id=…&mode=donation_book`, fetched through a public CORS
   proxy): ❌ = they don't need it, ✅ = wanted, ❓ = unknown/not yet checked.
   CSV gains an `archiveorg_want` column (`yes`/`no`/`?`).
-- **Command line**: `want_lookup.py` fills in `archiveorg_want` for a CSV
-  export without any browser/CORS limitations: `
-  python want_lookup.py isbn-captures.csv out.csv` (or `-` for stdout).
+- **Command line** (stdlib-only): `want_lookup.py` fills in `archiveorg_want`
+  and `title_lookup.py` fills in `title`/`authors`/`lookup`:
+  `py -3 title_lookup.py input.csv out.csv` (or `-` for stdout; `--all`
+  forces re-fetch).
+  Both require the canonical `archiveorg_want` column name.
+- CSV quoting: title/authors/note are quoted — earlier exports (v0.0.21–24)
+  corrupt rows for multi-author books; re-export or hand-fix `want`→
+  `archiveorg_want` at the same time
 - **Copy all** puts newline-delimited ISBN-13s on the clipboard; **Export CSV**
   downloads `isbn_entered,isbn10,isbn13,title,authors,lookup,note,timestamp`.
   Both clear the "not yet exported" nag.

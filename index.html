@@ -127,14 +127,14 @@
   <button id="csvBtn">Export CSV</button>
 </div>
 <div class="controls">
-  <button id="fetchTitlesBtn">Fetch titles</button>
+  <button id="fetchTitlesBtn">Fetch missing data</button>
 </div>
 
 <div id="version" style="text-align:center;color:#666;font-size:0.75rem;margin-top:1rem"></div>
 
 <script>
 'use strict';
-const APP_VERSION = 'v0.0.24 (2026-08-23) - CSV column renamed archiveorg_want; text+color badges'
+const APP_VERSION = 'v0.0.25 (2026-08-23) - no lookup on page load; one retry per failed lookup; Fetch missing data button'
 document.getElementById('version').textContent = APP_VERSION;
 
 
@@ -465,7 +465,7 @@ function render() {
     listEl.appendChild(li);
   }
   copyBtn.disabled = csvBtn.disabled = captures.length === 0;
-  const needsFetch = captures.some(c => c.isbn13 && (c.lookup === undefined || c.lookup === 'not-found'));
+  const needsFetch = captures.some(c => c.isbn13 && (!c.title || c.want === undefined || c.want === '?'));
   fetchTitlesBtn.disabled = !needsFetch;
   updateNag();
 }
@@ -562,30 +562,34 @@ async function runLookupQueue() {
       setStatus(`Fetching titles/want-status\u2026 ${queue.length} left`, true);
       render();
       const cap = queue[0];
-      try {
-        if (!cap.title && cap.lookup === undefined) {
-          const meta = await lookupTitle(cap.isbn13);
-          if (meta) {
-            cap.title = meta.title;
-            cap.authors = meta.authors;
-            cap.lookup = 'found';
-            found++;
-          } else {
-            cap.lookup = 'not-found';
-            missed++;
+      // One in-place retry per record (transient blips are common); after
+      // that give up on THIS record (stays pending) and move on.
+      let failed = false;
+      for (let attempt = 0; attempt < 2 && !failed; attempt++) {
+        try {
+          if (!cap.title && cap.lookup === undefined) {
+            const meta = await lookupTitle(cap.isbn13);
+            if (meta) {
+              cap.title = meta.title;
+              cap.authors = meta.authors;
+              cap.lookup = 'found';
+              found++;
+            } else {
+              cap.lookup = 'not-found';
+              missed++;
+            }
           }
+          if (cap.want === undefined) {
+            const w = await lookupWant(cap.isbn13);
+            cap.want = w;
+            if (w === 'yes') wanted++; else if (w === 'no') unwanted++;
+          }
+        } catch {
+          if (attempt === 0) await new Promise(r => setTimeout(r, 1000));
+          else failed = true;
         }
-        if (cap.want === undefined) {
-          const w = await lookupWant(cap.isbn13);
-          cap.want = w;
-          if (w === 'yes') wanted++; else if (w === 'no') unwanted++;
-        }
-      } catch {
-        // network/API failure: leave ALL pending for the next attempt
-        lookupStatus = 'failed';
-        setStatus(`Lookup failed (network/proxy?) \u2014 ${queue.length} still pending; try \u201cFetch titles\u201d.`, false);
-        return;   // finally still resets lookupRunning
       }
+      if (failed) { stillPending++; continue; }
       saveCaptures();
       render();
       await new Promise(r => setTimeout(r, 300)); // be polite
@@ -648,10 +652,14 @@ copyBtn.addEventListener('click', async () => {
   }
 });
 csvBtn.addEventListener('click', () => {
+  // Quote ALL free-text fields — Open Library author/title lists contain
+  // commas, and an unquoted comma shifts every later column (seen live with
+  // "Gilly, The staff of O'Reilly Media").
+  const q = s => `"${String(s == null ? '' : s).replace(/"/g, '""')}"`;
   const rows = ['isbn_entered,isbn10,isbn13,title,authors,archiveorg_want,lookup,note,timestamp',
-    ...captures.map(c => [c.display, c.isbn10, c.isbn13,
-      c.title || '', c.authors || '', c.want || '?', c.lookup || '',
-      `"${(c.note || '').replace(/"/g, '""')}"`, new Date(c.ts).toISOString()].join(','))];
+    ...captures.map(c => [q(c.display), q(c.isbn10), q(c.isbn13),
+      q(c.title), q(c.authors), q(c.want || '?'), q(c.lookup),
+      q(c.note), q(new Date(c.ts).toISOString())].join(','))];
   const blob = new Blob([rows.join('\n')], { type: 'text/csv' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
@@ -754,8 +762,9 @@ if (!SR) {
 }
 
 render();
-lookupAbort = false;
-runLookupQueue();   // auto-fetch missing titles on load
+// NOTE: deliberately NO auto-lookup on page load — reloads must not storm
+// lookups for records whose enrichment previously failed. New captures kick
+// the queue themselves; "Fetch missing data" covers everything else.
 // ---------- Camera barcode scanning (Chrome/Android) ----------
 const scanBtn = document.getElementById('scanBtn');
 const scanView = document.getElementById('scanView');

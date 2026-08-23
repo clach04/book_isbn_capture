@@ -1,16 +1,47 @@
-# CONTEXT.md
+# Context — Book ISBN Capture
+
+A voice-first/camera-first tool for cataloguing physical books by ISBN,
+enriching them with metadata, and checking Internet Archive donation
+interest. Pure client-side app plus small CLI helper scripts.
 
 ## Glossary
 
-- **ISBN**: International Standard Book Number. The tool accepts both **ISBN-13** and **ISBN-10**; both carry a check digit.
-- **Check digit**: Final digit of an ISBN allowing local validation without network access. A capture that fails the check is invalid.
-- **Capture**: One successfully validated ISBN plus its optional Note, recorded into the working list.
-- **Note (breadcrumb)**: Freeform user-spoken description of the physical book (e.g. "blue hardcover, Dahl"). Never authoritative metadata; exists so the user can relocate the physical book to re-capture if needed.
-- **Working list**: The session's accumulated Captures, persisted locally in the browser until exported.
-- **Audio cue**: Short non-speech tone signalling success or failure/needs-review of a Capture attempt.
-- **Readback (visual)**: Display of the captured digits for the user to glance at and confirm.
+**Capture**
+One physical book recorded by the tool. Identified canonically by its
+ISBN-13 regardless of which form was entered.
 
-## Rules
+**Capture record**
+The stored unit: `display` (verbatim entered ISBN), derived `isbn10`/
+`isbn13`, `title`, `authors`, `want`, `lookup`, `note`, `ts`.
 
-- An utterance may be "description then ISBN" or ISBN-only; parsing takes the *last* digit run that passes a checksum of length 10 or 13. If none validates, the whole utterance fails loudly — no guessing.
-- Failed captures are surfaced immediately (failure audio cue + visual), never silently stored.
+**Lookup status (`lookup`)**
+State of the Open Library title fetch for a capture: *pending*
+(never attempted or attempt failed — retry is worthwhile), *found*,
+*not-found* (Open Library has no such book). Pending and not-found are
+different facts: transient failure must never masquerade as absence.
+
+**Want status (`want`)**
+Whether archive.org wants the book as a donation: *yes*, *no*,
+*unknown* (`?` = checked but verdict unclear), or *pending* (unchecked).
+Independent of lookup status.
+
+**Note**
+Free-text description spoken/typed alongside the ISBN ("blue hardcover
+Dahl"). Same-utterance only or tap-to-edit; never carried across turns.
+
+**Repair**
+Deterministic single-digit reconstruction of a spoken/typed ISBN using its
+checksum. Unique per run, flagged "repaired — verify!". Exact matches always
+win over repairs.
+
+**Export**
+Copy-all (newline-delimited ISBN-13s) or CSV download. Clears the
+unexported-captures nag. CSV columns:
+`isbn_entered,isbn10,isbn13,title,authors,archiveorg_want,lookup,note,timestamp`.
+
+**Enrichment**
+Filling `title`/`authors` (Open Library) and `want` (archive.org /want/)
+for captures. Runs automatically when a capture is created — **never on
+page load** (a deliberate choice: reloads must not storm failing lookups)
+— and manually via the "Fetch missing data" button, which also retries
+not-found titles and unknown want statuses.

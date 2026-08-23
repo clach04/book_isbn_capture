@@ -91,7 +91,7 @@ def main(argv):
         if i < len(todo):
             time.sleep(DELAY_SEC)
 
-    writer_kwargs = dict(fieldnames=fields)
+    writer_kwargs = dict(fieldnames=fields, extrasaction="ignore")
     out_file = sys.stdout if out_path == "-" else open(out_path, "w", newline="", encoding="utf-8")
     try:
         writer = csv.DictWriter(out_file, **writer_kwargs)
