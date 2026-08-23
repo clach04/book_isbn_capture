@@ -254,6 +254,38 @@ function tryRepair(run) {
   return null;
 }
 
+// Clean cumulative-final garbage from a dictated note.
+// Keeps the first complete occurrence of a repeated phrase (optionally
+// extended left while the longer phrase still repeats), then truncates from
+// its last occurrence. See plan_v005_note_dedupe.md and dupes.md.
+// TODO: remove regex here and loop through characters manually instead -
+// cleaner, safer (no regex edge cases/catastrophic backtracking), and
+// potentially faster on long notes.
+function cleanNote(note) {
+  const m = /[a-zA-Z]/.exec(note);
+  if (!m) return note;
+  const low = note.toLowerCase();
+  const d = /\s\d+\s/.exec(note.slice(m.index));
+  let first = (d ? note.slice(m.index, m.index + d.index) : note.slice(m.index)).trim();
+  // Greedy left-extension: prepend the preceding token while the extended
+  // phrase still occurs at least twice (case-insensitive).
+  while (true) {
+    const s = low.indexOf(first.toLowerCase());
+    const e = s + first.length;
+    let k = s - 1;
+    while (k >= 0 && note[k] === ' ') k--;
+    while (k >= 0 && note[k] !== ' ') k--;
+    const ext = (k >= 0 || s > 0) ? note.slice(k + 1, e) : '';
+    if (ext && ext.length > first.length &&
+        low.split(ext.toLowerCase()).length - 1 >= 2) {
+      first = ext.trim();
+    } else {
+      break;
+    }
+  }
+  return note.slice(low.lastIndexOf(first.toLowerCase())).trim();
+}
+
 // Backstop for Chrome speech quirks: collapse immediately repeated word
 // sequences in a note ("a b c a b c" -> "a b c"), longest match first.
 function collapseRepeats(s) {
@@ -274,10 +306,10 @@ function parseUtterance(text) {
   for (let i = runs.length - 1; i >= 0; i--) {
     const run = runs[i];
     if (run.length === 13 && isValidIsbn13(run)) {
-      return { raw: run, note: collapseRepeats(normalized.slice(0, normalized.lastIndexOf(run)).trim()) };
+      return { raw: run, note: cleanNote(collapseRepeats(normalized.slice(0, normalized.lastIndexOf(run)).trim())) };
     }
     if (run.length === 10 && isValidIsbn10(run)) {
-      return { raw: run, note: collapseRepeats(normalized.slice(0, normalized.lastIndexOf(run)).trim()) };
+      return { raw: run, note: cleanNote(collapseRepeats(normalized.slice(0, normalized.lastIndexOf(run)).trim())) };
     }
   }
   // then deterministic single-digit repairs (prefer the last)
@@ -286,7 +318,7 @@ function parseUtterance(text) {
     const fixed = tryRepair(runs[i]);
     if (fixed) {
       return { raw: fixed, repaired: true,
-        note: collapseRepeats(normalized.slice(0, normalized.lastIndexOf(runs[i])).trim()) };
+        note: cleanNote(collapseRepeats(normalized.slice(0, normalized.lastIndexOf(runs[i])).trim())) };
     }
   }
   return null;
