@@ -111,15 +111,20 @@
 
 <script>
 'use strict';
-const APP_VERSION = 'v0.0.13 (2026-08-23) - spoken/typed ISBN-10 check digit X';
+const APP_VERSION = 'v0.0.14 (2026-08-23) - retain ISBN-10 & ISBN-13, 979 handling, dedupe';
 document.getElementById('version').textContent = APP_VERSION;
 
 
 // ---------- Storage ----------
 const STORE_KEY = 'isbn-captures-v1';
 function loadCaptures() {
-  try { return JSON.parse(localStorage.getItem(STORE_KEY)) || []; }
-  catch { return []; }
+  try {
+    const stored = JSON.parse(localStorage.getItem(STORE_KEY)) || [];
+    // migrate pre-v0.0.14 records ({isbn,note,ts}) to the dual-column shape
+    return stored.map(c => c.isbn !== undefined && c.isbn13 === undefined
+      ? makeCaptureRecord(c.isbn, c.note, c.ts)
+      : c);
+  } catch { return []; }
 }
 function saveCaptures() {
   localStorage.setItem(STORE_KEY, JSON.stringify(captures));
@@ -144,14 +149,38 @@ function isValidIsbn10(d) {
 }
 function isValidIsbn(d) { return isValidIsbn13(d) || isValidIsbn10(d); }
 
-// Spoken ISBNs are digits only; X check digit can't be spoken, so ISBN-10
-// ending in X arrives via keyboard/paste.
+// Spoken ISBNs are digits (+ optional spoken 'x'/'ex' check digit); typed
+// entry may include X.
 function isbn13From10(d) {
   if (!isValidIsbn10(d)) return null;
   const core = '978' + d.slice(0, 9);
   let sum = 0;
   for (let i = 0; i < 12; i++) sum += (+core[i]) * (i % 2 === 0 ? 1 : 3);
   return core + ((10 - (sum % 10)) % 10);
+}
+// Reverse direction exists ONLY for 978-prefixed ISBN-13s; 979 books never had one.
+function isbn10From13(d) {
+  if (!isValidIsbn13(d) || !d.startsWith('978')) return null;
+  const core = d.slice(3, 12);
+  let sum = 0;
+  for (let i = 0; i < 9; i++) sum += (+core[i]) * (10 - i);
+  const cd = (11 - (sum % 11)) % 11;
+  return core + (cd === 10 ? 'X' : String(cd));
+}
+// Build storage record from a VALIDATED raw entry (10 or 13 chars).
+// The entered form is kept verbatim as `display`; the other form is derived
+// when mathematically possible (empty otherwise).
+function makeCaptureRecord(raw, note, ts) {
+  raw = raw.toUpperCase();
+  let isbn10 = null, isbn13 = null;
+  if (raw.length === 13) {
+    isbn13 = raw;
+    isbn10 = isbn10From13(raw);
+  } else {
+    isbn10 = raw;
+    isbn13 = isbn13From10(raw);
+  }
+  return { display: raw, isbn10: isbn10 || '', isbn13: isbn13 || '', note: note || '', ts };
 }
 
 // Spoken ISBNs may come back from speech recognition as digit words
@@ -192,11 +221,11 @@ function tryRepair(run) {
   }
   if (run.length === 9 && /^\d{9}$/.test(run)) {
     for (let d = 0; d <= 9; d++) {          // missing leading digit
-      if (isValidIsbn10(d + run)) return isbn13From10(d + run);
+      if (isValidIsbn10(d + run)) return d + run;
     }
     const last = ['X','0','1','2','3','4','5','6','7','8','9']; // missing check digit
     for (const x of last) {
-      if (isValidIsbn10(run + x)) return isbn13From10(run + x);
+      if (isValidIsbn10(run + x)) return run + x;
     }
   }
   return null;
@@ -211,17 +240,18 @@ function parseUtterance(text) {
   for (let i = runs.length - 1; i >= 0; i--) {
     const run = runs[i];
     if (run.length === 13 && isValidIsbn13(run)) {
-      return { isbn: run, note: normalized.slice(0, normalized.lastIndexOf(run)).trim() };
+      return { raw: run, note: normalized.slice(0, normalized.lastIndexOf(run)).trim() };
     }
     if (run.length === 10 && isValidIsbn10(run)) {
-      return { isbn: isbn13From10(run), note: normalized.slice(0, normalized.lastIndexOf(run)).trim() };
+      return { raw: run, note: normalized.slice(0, normalized.lastIndexOf(run)).trim() };
     }
   }
   // then deterministic single-digit repairs (prefer the last)
+  // repairs stay in the ORIGINAL flavor: len-9 -> ISBN-10, len-12 -> ISBN-13
   for (let i = runs.length - 1; i >= 0; i--) {
     const fixed = tryRepair(runs[i]);
     if (fixed) {
-      return { isbn: fixed, repaired: true,
+      return { raw: fixed, repaired: true,
         note: normalized.slice(0, normalized.lastIndexOf(runs[i])).trim() };
     }
   }
@@ -286,19 +316,20 @@ function render() {
     const li = document.createElement('li');
     const isbn = document.createElement('span');
     isbn.className = 'isbn';
-    isbn.textContent = cap.isbn;
-    isbn.title = 'Tap to fix';
+    isbn.textContent = cap.display;
+    isbn.title = ['ISBN-13: ' + (cap.isbn13 || '\u2014'), 'ISBN-10: ' + (cap.isbn10 || '\u2014 (979 prefix)'), new Date(cap.ts).toLocaleString()].join('\n');
     isbn.style.cursor = 'pointer';
     isbn.addEventListener('click', () => {
       const input = document.createElement('input');
       input.className = 'fix';
-      input.value = cap.isbn;
+      input.value = cap.display;
       input.setAttribute('inputmode', 'numeric');
       input.addEventListener('keydown', e => { if (e.key === 'Enter') input.blur(); });
       input.addEventListener('blur', () => {
         const v = input.value.replace(/[^0-9Xx]/g, '');
         if (isValidIsbn(v)) {
-          captures[i].isbn = v.length === 10 ? isbn13From10(v) : v;
+          const rec = makeCaptureRecord(v, captures[i].note, captures[i].ts);
+          captures[i] = rec;
           saveCaptures(); setStatus('Fixed.', true);
         } else {
           setStatus(`Invalid ISBN "${input.value}" \u2014 reverted.`, false); errorCue();
@@ -327,9 +358,19 @@ function render() {
   updateNag();
 }
 
-function addCapture(isbn, note) {
-  captures.unshift({ isbn, note: note || '', ts: Date.now() });
+function addCapture(raw, note) {
+  const rec = makeCaptureRecord(raw, note, Date.now());
+  // Duplicate detection on the canonical ISBN-13 (same book entered once as
+  // ISBN-10 and once as ISBN-13 would otherwise look like two entries)
+  const dupe = captures.find(c => c.isbn13 && c.isbn13 === rec.isbn13);
+  if (dupe) {
+    setStatus(`Already captured: ${rec.display} (${dupe.isbn13}) \u2014 skipped.`, false);
+    errorCue();
+    return false;
+  }
+  captures.unshift(rec);
   saveCaptures(); render();
+  return true;
 }
 
 // ---------- Manual entry ----------
@@ -337,9 +378,10 @@ manualForm.addEventListener('submit', e => {
   e.preventDefault();
   const v = manualInput.value.replace(/[^0-9Xx]/g, '');
   if (isValidIsbn(v)) {
-    addCapture(v.length === 10 ? isbn13From10(v) : v, '');
-    setStatus(`Added ${v}`, true); successCue();
-    manualInput.value = '';
+    if (addCapture(v, '') !== false) {
+      setStatus(`Added ${v}`, true); successCue();
+      manualInput.value = '';
+    }
   } else {
     setStatus(`Invalid ISBN: "${manualInput.value}"`, false); errorCue();
   }
@@ -351,7 +393,7 @@ function markExported() {
   updateNag();
 }
 copyBtn.addEventListener('click', async () => {
-  const text = captures.map(c => c.isbn).join('\n');
+  const text = captures.map(c => c.isbn13 || c.display).join('\n');
   try {
     await navigator.clipboard.writeText(text);
     setStatus(`Copied ${captures.length} ISBN(s).`, true); successCue();
@@ -361,8 +403,9 @@ copyBtn.addEventListener('click', async () => {
   }
 });
 csvBtn.addEventListener('click', () => {
-  const rows = ['isbn,note,timestamp',
-    ...captures.map(c => [c.isbn, `"${(c.note || '').replace(/"/g, '""')}"`, new Date(c.ts).toISOString()].join(','))];
+  const rows = ['isbn_entered,isbn10,isbn13,note,timestamp',
+    ...captures.map(c => [c.display, c.isbn10, c.isbn13,
+      `"${(c.note || '').replace(/"/g, '""')}"`, new Date(c.ts).toISOString()].join(','))];
   const blob = new Blob([rows.join('\n')], { type: 'text/csv' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
@@ -403,9 +446,10 @@ if (!SR) {
     transcriptEl.textContent = `\u201c${text}\u201d`;
     const parsed = parseUtterance(text);
     if (parsed) {
-      addCapture(parsed.isbn, parsed.note);
-      setStatus(`\u2713 ${parsed.isbn}${parsed.repaired ? ' (repaired a dropped digit \u2014 verify!)' : ''}${parsed.note ? ' \u2014 ' + parsed.note : ''}`, parsed.repaired ? false : true);
-      if (!parsed.repaired) successCue(); else errorCue();
+      if (addCapture(parsed.raw, parsed.note) !== false) {
+        setStatus(`\u2713 ${parsed.raw}${parsed.repaired ? ' (repaired a dropped digit \u2014 verify!)' : ''}${parsed.note ? ' \u2014 ' + parsed.note : ''}`, parsed.repaired ? false : true);
+        if (!parsed.repaired) successCue(); else errorCue();
+      }
     } else {
       setStatus(`Could not find a valid ISBN in that \u2014 say it again.`, false);
       errorCue();

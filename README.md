@@ -62,3 +62,23 @@ Tips:
   checksum; text before it is kept as the note. No valid run → whole turn
   fails loudly; nothing invalid is ever stored.
 - Every behavior change gets a version bump + git commit; see `git log`
+
+## Test Data
+
+
+### The C Programming Language
+
+https://isbnsearch.org/isbn/9780131101630
+
+  ISBN-13: 9780131101630
+  ISBN-10: 0131101633
+  ISBN-10: 01 31 10 16 33
+
+
+### Linux in a Nutshell (In a Nutshell (O'Reilly))
+
+https://isbnsearch.org/isbn/9781565925854
+
+  ISBN-13: 9781565925854
+  ISBN-10: 1565925858
+  ISBN-10: 1 56 59 25 85 8
