@@ -101,7 +101,7 @@
 
 <script>
 'use strict';
-const APP_VERSION = 'v0.0.6 (2026-08-23) - start beep + dropped-digit auto-repair';
+const APP_VERSION = 'v0.0.7 (2026-08-23) - delayed start beep to match real mic activation';
 document.getElementById('version').textContent = APP_VERSION;
 
 
@@ -346,6 +346,7 @@ csvBtn.addEventListener('click', () => {
 
 // ---------- Speech ----------
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+let startBeepTimer = null;
 if (!SR) {
   document.getElementById('speechUnsupported').style.display = 'block';
   talkBtn.disabled = true;
@@ -363,7 +364,10 @@ if (!SR) {
     talkBtn.textContent = '\u23f8 Listening\u2026 speak ISBN';
     transcriptEl.textContent = '';
     setStatus('', true);
-    tone(660, 0.09);   // 'mic is live' cue \u2014 start speaking AFTER this beep
+    // Chrome's audio capture (and the URL-bar mic icon) lags slightly behind
+    // onstart; delay the 'go' cue so users never speak into a cold mic.
+    clearTimeout(startBeepTimer);
+    startBeepTimer = setTimeout(() => tone(660, 0.09), 350);
   };
   rec.onresult = e => {
     const text = e.results[0][0].transcript;
