@@ -101,7 +101,7 @@
 
 <script>
 'use strict';
-const APP_VERSION = 'v0.0.5 (2026-08-23) - no-speech handling + hallucination filter';
+const APP_VERSION = 'v0.0.6 (2026-08-23) - start beep + dropped-digit auto-repair';
 document.getElementById('version').textContent = APP_VERSION;
 
 
@@ -158,9 +158,39 @@ function normalizeSpokenDigits(text) {
 // ---------- Parser: "description then ISBN" ----------
 // Take the LAST digit run (len 10 or 13) that passes checksum.
 // Everything before it is the note.
+// Deterministic repair of a single dropped/missing digit using the checksum.
+// At most one value of the missing digit satisfies the checksum, so these are
+// unique reconstructions, never guesses.
+function isbn13CheckDigit(core12) {
+  let sum = 0;
+  for (let i = 0; i < 12; i++) sum += (+core12[i]) * (i % 2 === 0 ? 1 : 3);
+  return (10 - (sum % 10)) % 10;
+}
+function tryRepair(run) {
+  if (run.length === 12 && /^\d{12}$/.test(run)) {
+    const c = isbn13CheckDigit(run);
+    if (isValidIsbn13(run + c)) return run + c;
+    for (let d = 0; d <= 9; d++) {          // missing FIRST digit instead
+      const cand = d + run + c;
+      if (isValidIsbn13(cand)) return cand;
+    }
+  }
+  if (run.length === 9 && /^\d{9}$/.test(run)) {
+    for (let d = 0; d <= 9; d++) {          // missing leading digit
+      if (isValidIsbn10(d + run)) return isbn13From10(d + run);
+    }
+    const last = ['X','0','1','2','3','4','5','6','7','8','9']; // missing check digit
+    for (const x of last) {
+      if (isValidIsbn10(run + x)) return isbn13From10(run + x);
+    }
+  }
+  return null;
+}
+
 function parseUtterance(text) {
   const normalized = normalizeSpokenDigits(text).replace(/(?<=\d)\s+(?=\d)/g, '');
   const runs = normalized.replace(/\D+/g, ' ').trim().split(' ').filter(Boolean);
+  // exact matches first (prefer the last)
   for (let i = runs.length - 1; i >= 0; i--) {
     const run = runs[i];
     if (run.length === 13 && isValidIsbn13(run)) {
@@ -168,6 +198,14 @@ function parseUtterance(text) {
     }
     if (run.length === 10 && isValidIsbn10(run)) {
       return { isbn: isbn13From10(run), note: normalized.slice(0, normalized.lastIndexOf(run)).trim() };
+    }
+  }
+  // then deterministic single-digit repairs (prefer the last)
+  for (let i = runs.length - 1; i >= 0; i--) {
+    const fixed = tryRepair(runs[i]);
+    if (fixed) {
+      return { isbn: fixed, repaired: true,
+        note: normalized.slice(0, normalized.lastIndexOf(runs[i])).trim() };
     }
   }
   return null;
@@ -325,6 +363,7 @@ if (!SR) {
     talkBtn.textContent = '\u23f8 Listening\u2026 speak ISBN';
     transcriptEl.textContent = '';
     setStatus('', true);
+    tone(660, 0.09);   // 'mic is live' cue \u2014 start speaking AFTER this beep
   };
   rec.onresult = e => {
     const text = e.results[0][0].transcript;
@@ -337,8 +376,8 @@ if (!SR) {
     const parsed = parseUtterance(text);
     if (parsed) {
       addCapture(parsed.isbn, parsed.note);
-      setStatus(`\u2713 ${parsed.isbn}${parsed.note ? ' \u2014 ' + parsed.note : ''}`, true);
-      successCue();
+      setStatus(`\u2713 ${parsed.isbn}${parsed.repaired ? ' (repaired a dropped digit \u2014 verify!)' : ''}${parsed.note ? ' \u2014 ' + parsed.note : ''}`, parsed.repaired ? false : true);
+      if (!parsed.repaired) successCue(); else errorCue();
     } else {
       setStatus(`Could not find a valid ISBN in that \u2014 say it again.`, false);
       errorCue();
