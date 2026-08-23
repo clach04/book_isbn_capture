@@ -101,7 +101,7 @@
 
 <script>
 'use strict';
-const APP_VERSION = 'v0.0.9 (2026-08-23) - auto-end turn after 3s of silence';
+const APP_VERSION = 'v0.0.10 (2026-08-23) - hyphen-tolerant parsing + immediate Starting-mic feedback';
 document.getElementById('version').textContent = APP_VERSION;
 
 
@@ -188,7 +188,9 @@ function tryRepair(run) {
 }
 
 function parseUtterance(text) {
-  const normalized = normalizeSpokenDigits(text).replace(/(?<=\d)\s+(?=\d)/g, '');
+  const normalized = normalizeSpokenDigits(text)
+    .replace(/(?<=\d)\s+(?=\d)/g, '')
+    .replace(/(?<=\d)-(?=\d)/g, '');   // speech services insert hyphens between digit groups
   const runs = normalized.replace(/\D+/g, ' ').trim().split(' ').filter(Boolean);
   // exact matches first (prefer the last)
   for (let i = runs.length - 1; i >= 0; i--) {
@@ -390,6 +392,7 @@ if (!SR) {
 
   talkBtn.addEventListener('click', () => {
     if (listening) { rec.stop(); return; }   // tap again to end the turn early
+    setStatus('Starting mic\u2026', true);
     try { rec.start(); } catch { /* already started */ }
   });
   rec.onstart = () => {
