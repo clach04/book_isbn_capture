@@ -111,7 +111,7 @@
 
 <script>
 'use strict';
-const APP_VERSION = 'v0.0.14 (2026-08-23) - retain ISBN-10 & ISBN-13, 979 handling, dedupe';
+const APP_VERSION = 'v0.0.15 (2026-08-23) - tap to edit notes';
 document.getElementById('version').textContent = APP_VERSION;
 
 
@@ -341,8 +341,23 @@ function render() {
     });
     const note = document.createElement('span');
     note.className = 'note';
-    note.textContent = cap.note || '';
-    note.title = new Date(cap.ts).toLocaleString();
+    note.textContent = cap.note || '\u2014';
+    if (!cap.note) note.style.opacity = '0.35';
+    note.title = new Date(cap.ts).toLocaleString() + ' \u2014 tap to edit note';
+    note.style.cursor = 'pointer';
+    note.addEventListener('click', () => {
+      const input = document.createElement('input');
+      input.value = cap.note;
+      input.style.cssText = 'flex:1;min-width:0;background:#000;color:#eee;border:1px solid #555;border-radius:4px;padding:0.2rem;font-size:0.85rem;';
+      input.placeholder = 'note (description, condition\u2026)';
+      input.addEventListener('keydown', e => { if (e.key === 'Enter') input.blur(); });
+      input.addEventListener('blur', () => {
+        captures[i].note = input.value.trim();
+        saveCaptures(); render();
+      });
+      note.replaceWith(input);
+      input.focus();
+    });
     const del = document.createElement('button');
     del.className = 'del';
     del.textContent = '\u00d7';
