@@ -61,7 +61,10 @@ Tips:
   Archive **wants** the book as a donation (via
   `archive.org/want/?id=…&mode=donation_book`, fetched through a public CORS
   proxy): ❌ = they don't need it, ✅ = wanted, ❓ = unknown/not yet checked.
-  CSV gains a `want` column (`yes`/`no`/`?`).
+  CSV gains an `archiveorg_want` column (`yes`/`no`/`?`).
+- **Command line**: `want_lookup.py` fills in `archiveorg_want` for a CSV
+  export without any browser/CORS limitations: `
+  python want_lookup.py isbn-captures.csv out.csv` (or `-` for stdout).
 - **Copy all** puts newline-delimited ISBN-13s on the clipboard; **Export CSV**
   downloads `isbn_entered,isbn10,isbn13,title,authors,lookup,note,timestamp`.
   Both clear the "not yet exported" nag.

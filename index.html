@@ -134,7 +134,7 @@
 
 <script>
 'use strict';
-const APP_VERSION = 'v0.0.23 (2026-08-23) - archive.org donation-want check (emoji badge per row, want column in CSV)'
+const APP_VERSION = 'v0.0.24 (2026-08-23) - CSV column renamed archiveorg_want; text+color badges'
 document.getElementById('version').textContent = APP_VERSION;
 
 
@@ -404,13 +404,16 @@ function render() {
       const want = document.createElement('span');
       want.style.cursor = 'help';
       if (cap.want === 'no') {
-        want.textContent = '\u274c';
+        want.textContent = '\u274c no';
+        want.style.color = '#f87171';
         want.title = "archive.org: we don't need this book";
       } else if (cap.want === 'yes') {
-        want.textContent = '\u2705';
+        want.textContent = '\u2705 yes';
+        want.style.color = '#4ade80';
         want.title = 'archive.org: they need this book';
       } else {
-        want.textContent = '\u2753';
+        want.textContent = '\u2753 ?';
+        want.style.color = '#999';
         want.title = cap.want === '?' ? 'archive.org want-status unknown' : 'want-status not checked yet';
       }
       row2.append(want);
@@ -645,7 +648,7 @@ copyBtn.addEventListener('click', async () => {
   }
 });
 csvBtn.addEventListener('click', () => {
-  const rows = ['isbn_entered,isbn10,isbn13,title,authors,want,lookup,note,timestamp',
+  const rows = ['isbn_entered,isbn10,isbn13,title,authors,archiveorg_want,lookup,note,timestamp',
     ...captures.map(c => [c.display, c.isbn10, c.isbn13,
       c.title || '', c.authors || '', c.want || '?', c.lookup || '',
       `"${(c.note || '').replace(/"/g, '""')}"`, new Date(c.ts).toISOString()].join(','))];
