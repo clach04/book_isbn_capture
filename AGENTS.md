@@ -20,7 +20,7 @@ Fail fast on unexpected input; log full technical context, but redact secrets.
 Include stack trace plus semantic context (example: "Failed at model comparison step 2/5").
 Use trace-level logs for major steps when debugging is enabled.
 
-NEVER `git push` without explicit user confirmation.
+NEVER `git push` without explicit user confirmation, each and EVERY time.
 NEVER `git commit` unless explicitly asked by the user.
 NEVER use `git add -A` or `git add .`; always list files explicitly in `git add`.
 
