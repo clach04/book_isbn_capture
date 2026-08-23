@@ -378,7 +378,6 @@ function render() {
     meta.className = 'meta';
     const row1 = document.createElement('div');
     row1.className = 'row';
-    row1.append(isbn, titleLine);
     const titleLine = document.createElement('span');
     titleLine.className = 'titleline';
     if (cap.title) {
@@ -397,6 +396,7 @@ function render() {
       titleLine.textContent = 'looking up title\u2026';
       titleLine.classList.add('pending');
     }
+    row1.append(isbn, titleLine);
     const row2 = document.createElement('div');
     row2.className = 'row';
     if (cap.isbn13) {
