@@ -85,6 +85,15 @@
 
 <div id="nag"></div>
 
+<div class="controls" style="margin-top:0.5rem">
+  <button id="scanBtn" style="display:none;background:#059669;margin-top:0.5rem;width:100%;padding:1rem;font-size:1.1rem;border-radius:12px"></button>
+</div>
+<div id="scanView" style="display:none;position:fixed;inset:0;z-index:10;background:#000">
+  <video id="scanVideo" autoplay playsinline muted style="width:100%;height:100%;object-fit:cover"></video>
+  <div id="scanStatus" style="position:absolute;top:1rem;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.7);padding:0.4rem 0.8rem;border-radius:8px;font-size:0.9rem">Point at a book barcode\u2026</div>
+  <button id="scanClose" style="position:absolute;top:1rem;right:1rem;padding:0.5rem 0.9rem;border:none;border-radius:8px;background:rgba(0,0,0,0.7);color:#fff;font-size:1rem">\u2715 Done</button>
+</div>
+
 <ul id="list"></ul>
 
 <form id="manualForm">
@@ -111,7 +120,7 @@
 
 <script>
 'use strict';
-const APP_VERSION = 'v0.0.17 (2026-08-23) - note repeat-collapse backstop';;
+const APP_VERSION = 'v0.0.18 (2026-08-23) - camera barcode scanning (BarcodeDetector, auto-capture)';;
 document.getElementById('version').textContent = APP_VERSION;
 
 
@@ -534,6 +543,60 @@ if (!SR) {
 }
 
 render();
+// ---------- Camera barcode scanning (Chrome/Android) ----------
+const scanBtn = document.getElementById('scanBtn');
+const scanView = document.getElementById('scanView');
+const scanVideo = document.getElementById('scanVideo');
+const scanStatus = document.getElementById('scanStatus');
+const scanClose = document.getElementById('scanClose');
+let scanStream = null, scanTimer = null, detector = null;
+
+if ('BarcodeDetector' in window) {
+  scanBtn.style.display = 'block';
+  scanBtn.textContent = '\ud83d\udcf7 Scan barcode';
+} // else: button stays hidden \u2014 no dependencies, native API only
+
+scanBtn.addEventListener('click', async () => {
+  try {
+    detector = detector || new BarcodeDetector({ formats: ['ean_13'] });
+    scanStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'environment' }
+    });
+    scanVideo.srcObject = scanStream;
+    scanView.style.display = 'block';
+    scanStatus.textContent = 'Point at a book barcode\u2026';
+    const tick = async () => {
+      if (!scanStream) return;
+      try {
+        const codes = await detector.detect(scanVideo);
+        for (const code of codes) {
+          const v = code.rawValue;
+          // EAN-13 is a book ISBN only under the 978/979 prefixes
+          if (/^(978|979)/.test(v) && isValidIsbn13(v)) {
+            if (addCapture(v, '')) {
+              setStatus(`\u2713 ${v} (scanned)`, true);
+              successCue();
+            } // duplicate: addCapture already cued + reported
+            scanStatus.textContent = `Captured ${v}`;
+            break; // one book per frame
+          }
+        }
+      } catch { /* transient decode errors are normal */ }
+      scanTimer = setTimeout(tick, 250);
+    };
+    tick();
+  } catch (err) {
+    setStatus(`Camera error: ${err.message || err}`, false);
+    errorCue();
+  }
+});
+
+function closeScanner() {
+  clearTimeout(scanTimer);
+  if (scanStream) { scanStream.getTracks().forEach(t => t.stop()); scanStream = null; }
+  scanView.style.display = 'none';
+}
+scanClose.addEventListener('click', closeScanner);
 </script>
 </body>
 </html>
