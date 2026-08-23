@@ -134,7 +134,7 @@
 
 <script>
 'use strict';
-const APP_VERSION = 'v0.0.21 (2026-08-23) - CSV gains title/authors/lookup columns; both detail + archive.org links per row'
+const APP_VERSION = 'v0.0.22 (2026-08-23) - auto-fetch title for captures added after load'
 document.getElementById('version').textContent = APP_VERSION;
 
 
@@ -366,6 +366,7 @@ function render() {
           const rec = makeCaptureRecord(v, captures[i].note, captures[i].ts);
           captures[i] = rec;
           saveCaptures(); setStatus('Fixed.', true);
+          runLookupQueue();   // edited ISBN = fresh pending record
         } else {
           setStatus(`Invalid ISBN "${input.value}" \u2014 reverted.`, false); errorCue();
         }
@@ -465,6 +466,7 @@ function addCapture(raw, note) {
   }
   captures.unshift(rec);
   saveCaptures(); render();
+  runLookupQueue();   // new record is pending — start fetching its title
   return true;
 }
 
