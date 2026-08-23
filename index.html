@@ -101,7 +101,7 @@
 
 <script>
 'use strict';
-const APP_VERSION = 'v0.0.8 (2026-08-23) - continuous listening; parse at end of speaking turn';
+const APP_VERSION = 'v0.0.9 (2026-08-23) - auto-end turn after 3s of silence';
 document.getElementById('version').textContent = APP_VERSION;
 
 
@@ -362,6 +362,11 @@ if (!SR) {
   // (With continuous=false Chrome finalizes at the first pause inside the
   // number and stops listening, truncating long spoken ISBNs.)
   let utterance = '';
+  let silenceTimer = null;
+  function armSilenceTimer() {
+    clearTimeout(silenceTimer);
+    silenceTimer = setTimeout(() => { if (listening) rec.stop(); }, 3000);
+  }
   function finishTurn() {
     const text = utterance.trim();
     utterance = '';
@@ -407,6 +412,7 @@ if (!SR) {
       else interim += r[0].transcript;
     }
     transcriptEl.textContent = `\u201c${(utterance + ' ' + interim).trim()}\u201d`;
+    armSilenceTimer();   // no speech for 3s -> end turn automatically
   };
   rec.onerror = e => {
     if (e.error === 'no-speech') {
@@ -421,6 +427,7 @@ if (!SR) {
   const isHallucination = t => !/\d/.test(t) && HALLUCINATIONS.some(re => re.test(t));
   rec.onend = () => {
     listening = false;
+    clearTimeout(silenceTimer);
     finishTurn();
     talkBtn.classList.remove('listening');
     talkBtn.innerHTML = '&#127908; Tap &amp; speak ISBN';
