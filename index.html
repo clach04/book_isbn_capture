@@ -111,7 +111,7 @@
 
 <script>
 'use strict';
-const APP_VERSION = 'v0.0.16 (2026-08-23) - handle cumulative speech results (Android)';
+const APP_VERSION = 'v0.0.17 (2026-08-23) - note repeat-collapse backstop';;
 document.getElementById('version').textContent = APP_VERSION;
 
 
@@ -231,6 +231,17 @@ function tryRepair(run) {
   return null;
 }
 
+// Backstop for Chrome speech quirks: collapse immediately repeated word
+// sequences in a note ("a b c a b c" -> "a b c"), longest match first.
+function collapseRepeats(s) {
+  let prev;
+  do {
+    prev = s;
+    s = s.replace(/\b([\w'-]+(?: [\w'-]+)*?)\s+\1\b/gi, '$1');
+  } while (s !== prev);
+  return s;
+}
+
 function parseUtterance(text) {
   const normalized = normalizeSpokenDigits(text)
     .replace(/(?<=[0-9X])\s+(?=[0-9X])/g, '')   // rejoin digit groups
@@ -240,10 +251,10 @@ function parseUtterance(text) {
   for (let i = runs.length - 1; i >= 0; i--) {
     const run = runs[i];
     if (run.length === 13 && isValidIsbn13(run)) {
-      return { raw: run, note: normalized.slice(0, normalized.lastIndexOf(run)).trim() };
+      return { raw: run, note: collapseRepeats(normalized.slice(0, normalized.lastIndexOf(run)).trim()) };
     }
     if (run.length === 10 && isValidIsbn10(run)) {
-      return { raw: run, note: normalized.slice(0, normalized.lastIndexOf(run)).trim() };
+      return { raw: run, note: collapseRepeats(normalized.slice(0, normalized.lastIndexOf(run)).trim()) };
     }
   }
   // then deterministic single-digit repairs (prefer the last)
@@ -252,7 +263,7 @@ function parseUtterance(text) {
     const fixed = tryRepair(runs[i]);
     if (fixed) {
       return { raw: fixed, repaired: true,
-        note: normalized.slice(0, normalized.lastIndexOf(runs[i])).trim() };
+        note: collapseRepeats(normalized.slice(0, normalized.lastIndexOf(runs[i])).trim()) };
     }
   }
   return null;
