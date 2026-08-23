@@ -134,7 +134,7 @@
 
 <script>
 'use strict';
-const APP_VERSION = 'v0.0.19 (2026-08-23) - ISBN metadata lookup (Open Library) + archive.org links';
+const APP_VERSION = 'v0.0.20 (2026-08-23) - fix title display, isbnsearch.org links, visible lookup progress';
 document.getElementById('version').textContent = APP_VERSION;
 
 
@@ -378,7 +378,7 @@ function render() {
     meta.className = 'meta';
     const row1 = document.createElement('div');
     row1.className = 'row';
-    row1.append(isbn);
+    row1.append(isbn, titleLine);
     const titleLine = document.createElement('span');
     titleLine.className = 'titleline';
     if (cap.title) {
@@ -402,10 +402,10 @@ function render() {
     if (cap.isbn13) {
       const arch = document.createElement('a');
       arch.className = 'archive';
-      arch.href = 'https://archive.org/search?query=isbn%3A' + cap.isbn13;
+      arch.href = 'https://isbnsearch.org/isbn/' + cap.isbn13;
       arch.target = '_blank';
       arch.rel = 'noopener';
-      arch.textContent = '\u21d7 archive.org';
+      arch.textContent = '\u21d7 details';
       row2.append(arch);
     }
     const note = document.createElement('span');
@@ -484,13 +484,18 @@ function pendingLookups() {
   return captures.filter(c => c.isbn13 && c.lookup === undefined && !c.title);
 }
 let lookupRunning = false;
+let lookupStatus = '';   // '' | 'running' | 'failed' — shown in the list header
 async function runLookupQueue() {
   if (lookupRunning || lookupAbort) return;
   lookupRunning = true;
+  let found = 0, missed = 0;
   try {
     while (!lookupAbort) {
       const queue = pendingLookups();
       if (queue.length === 0) break;
+      lookupStatus = 'running';
+      setStatus(`Fetching titles\u2026 ${queue.length} left`, true);
+      render();
       const cap = queue[0];
       try {
         const meta = await lookupTitle(cap.isbn13);
@@ -498,19 +503,28 @@ async function runLookupQueue() {
           cap.title = meta.title;
           cap.authors = meta.authors;
           cap.lookup = 'found';
+          found++;
         } else {
           cap.lookup = 'not-found';
+          missed++;
         }
       } catch {
-        // network/API failure: leave pending for the next attempt
-        break;
+        // network/API failure: leave ALL pending for the next attempt
+        lookupStatus = 'failed';
+        setStatus(`Title lookup failed (network?) \u2014 ${queue.length} still pending; try \u201cFetch titles\u201d.`, false);
+        return;   // finally still resets lookupRunning
       }
       saveCaptures();
       render();
       await new Promise(r => setTimeout(r, 300)); // be polite to Open Library
     }
+    lookupStatus = '';
+    if (found || missed) {
+      setStatus(`Titles: ${found} found${missed ? ', ' + missed + ' not in Open Library' : ''}.`, true);
+    }
   } finally {
     lookupRunning = false;
+    render();
   }
 }
 function retryNotFounds() {
@@ -519,8 +533,11 @@ function retryNotFounds() {
 }
 fetchTitlesBtn.addEventListener('click', () => {
   retryNotFounds();
-  setStatus('Fetching titles…', true);
   lookupAbort = false;
+  if (pendingLookups().length === 0) {
+    setStatus('All titles already fetched.', true);
+    return;
+  }
   runLookupQueue();
 });
 window.addEventListener('online', () => { lookupAbort = false; runLookupQueue(); });
