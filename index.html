@@ -93,6 +93,13 @@
 </form>
 
 <div class="controls">
+  <label style="display:flex;align-items:center;gap:0.4rem;flex:1;font-size:0.9rem">
+    Silence end-of-turn:
+    <input id="silenceSec" type="number" min="1" max="10" step="0.5" style="width:3.5em;background:#000;color:#eee;border:1px solid #555;border-radius:6px;padding:0.3rem">
+    sec
+  </label>
+</div>
+<div class="controls">
   <button id="copyBtn">Copy all</button>
   <button id="csvBtn">Export CSV</button>
 </div>
@@ -101,7 +108,7 @@
 
 <script>
 'use strict';
-const APP_VERSION = 'v0.0.10 (2026-08-23) - hyphen-tolerant parsing + immediate Starting-mic feedback';
+const APP_VERSION = 'v0.0.11 (2026-08-23) - on-screen configurable silence timeout';
 document.getElementById('version').textContent = APP_VERSION;
 
 
@@ -240,6 +247,18 @@ const manualForm = document.getElementById('manualForm');
 const manualInput = document.getElementById('manualInput');
 const copyBtn = document.getElementById('copyBtn');
 const csvBtn = document.getElementById('csvBtn');
+const silenceSec = document.getElementById('silenceSec');
+const SILENCE_KEY = 'isbn-silence-sec';
+silenceSec.value = localStorage.getItem(SILENCE_KEY) || '3';
+function silenceMs() {
+  const v = parseFloat(silenceSec.value);
+  return (v >= 1 && v <= 10 ? v : 3) * 1000;
+}
+silenceSec.addEventListener('change', () => {
+  const v = parseFloat(silenceSec.value);
+  if (!(v >= 1 && v <= 10)) silenceSec.value = '3';
+  localStorage.setItem(SILENCE_KEY, String(silenceSec.value));
+});
 
 function setStatus(msg, ok) {
   statusEl.textContent = msg;
@@ -367,7 +386,7 @@ if (!SR) {
   let silenceTimer = null;
   function armSilenceTimer() {
     clearTimeout(silenceTimer);
-    silenceTimer = setTimeout(() => { if (listening) rec.stop(); }, 3000);
+    silenceTimer = setTimeout(() => { if (listening) rec.stop(); }, silenceMs());
   }
   function finishTurn() {
     const text = utterance.trim();
