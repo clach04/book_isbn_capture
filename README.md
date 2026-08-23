@@ -1,0 +1,64 @@
+# Book ISBN Capture
+
+Voice-first ISBN capture tool for cataloguing physical books. Speak the ISBN
+(and optionally a description), it validates locally via checksum and builds an
+exportable list for archive.org / Open Library workflows.
+
+Pure static HTML+JS — one file, no dependencies, no backend.
+
+## Launch for local testing
+
+Speech recognition requires a secure context: `http://localhost` or `https://`.
+Plain `file://` will NOT work.
+
+```bash
+# from this directory
+python -m http.server 8000
+```
+
+Then open <http://localhost:8000> in **Chrome** (desktop or Android) and allow
+microphone access. Desktop Chrome's speech recognition routes through Google's
+servers, so network access is required.
+
+For phone use, deploy to any static HTTPS host (e.g. GitHub Pages); LAN-IP HTTP
+(`http://192.168.x.x`) will not get mic permission.
+
+## Usage
+
+1. Tap the big button → wait for the **beep** (mic is live)
+2. Optionally say a short description ("blue hardcover Dahl"), then the digits
+   of the ISBN — pauses are fine; a live transcript shows what's heard
+3. Stop speaking → after the configured silence (default 3 s, adjustable
+   on-screen; 1.5 s works well) the turn ends and the number is validated
+4. Success chime + green status = captured. Error buzz = say it again.
+   Typing/paste field is always available as fallback.
+
+Tips:
+
+- Both **ISBN-10** and **ISBN-13** accepted; everything is stored/converted to
+  ISBN-13 internally
+- A single dropped digit is repaired deterministically via the checksum
+  (status warns "repaired — verify!")
+- Some older ISBN-10s end in the letter **X** (~1 in 11): say "...six **ex**"
+  or type them in the manual field
+- Each row can be deleted (×) or have its digits fixed by tapping the ISBN
+- **Copy all** puts newline-delimited ISBNs on the clipboard; **Export CSV**
+  downloads `isbn,note,timestamp`. Both clear the "not yet exported" nag.
+
+## Notes
+
+- Captures persist in browser `localStorage` until exported — clear site data
+  wipes them, so export regularly
+- Chrome's recognizer takes ~0.5–2 s to warm up per turn; tap while reaching
+  for the next book
+- Version string is at the bottom of the page; check it after reloading if
+  behavior seems stale (browser cache)
+
+## Development
+
+- All logic lives inline in `index.html`
+- Parser rules: utterance → normalize digit words ("nine"→9, "ex"→X) → rejoin
+  split digit groups (spaces/hyphens) → take the LAST 10/13-char run passing
+  checksum; text before it is kept as the note. No valid run → whole turn
+  fails loudly; nothing invalid is ever stored.
+- Every behavior change gets a version bump + git commit; see `git log`

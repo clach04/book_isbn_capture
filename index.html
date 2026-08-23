@@ -88,9 +88,12 @@
 <ul id="list"></ul>
 
 <form id="manualForm">
-  <input id="manualInput" inputmode="numeric" placeholder="type / paste ISBN" autocomplete="off">
+  <input id="manualInput" placeholder="type / paste ISBN" autocomplete="off">
   <button id="manualAdd" type="submit">Add</button>
 </form>
+<div style="color:#888;font-size:0.78rem;margin-top:0.4rem">
+  Some older ISBN-10s end in the letter X (about 1 in 11) \u2014 voice can't say it reliably; type/paste those instead.
+</div>
 
 <div class="controls">
   <label style="display:flex;align-items:center;gap:0.4rem;flex:1;font-size:0.9rem">
@@ -108,7 +111,7 @@
 
 <script>
 'use strict';
-const APP_VERSION = 'v0.0.12 (2026-08-23) - removed hallucination phrase filter';
+const APP_VERSION = 'v0.0.13 (2026-08-23) - spoken/typed ISBN-10 check digit X';
 document.getElementById('version').textContent = APP_VERSION;
 
 
@@ -154,11 +157,16 @@ function isbn13From10(d) {
 // Spoken ISBNs may come back from speech recognition as digit words
 // ("nine seven eight ...") instead of numerals ("978 ..."). Normalize first.
 const DIGIT_WORDS = { zero:'0', oh:'0', o:'0', one:'1', two:'2', three:'3', four:'4',
-  five:'5', six:'6', seven:'7', eight:'8', nine:'9' };
+  five:'5', six:'6', seven:'7', eight:'8', nine:'9',
+  ex:'X', x:'X' };   // spoken check-digit X of some ISBN-10s
 function normalizeSpokenDigits(text) {
   return text.split(/(\s+)/).map(tok => {
-    const w = tok.trim().toLowerCase().replace(/[^a-z]/g, '');
-    return DIGIT_WORDS[w] !== undefined && w ? DIGIT_WORDS[w] : tok;
+    const trimmed = tok.trim();
+    if (/^[a-z]+$/i.test(trimmed)) {          // only translate whole words
+      const mapped = DIGIT_WORDS[trimmed.toLowerCase()];
+      if (mapped !== undefined) return mapped;
+    }
+    return tok;
   }).join('');
 }
 
@@ -196,9 +204,9 @@ function tryRepair(run) {
 
 function parseUtterance(text) {
   const normalized = normalizeSpokenDigits(text)
-    .replace(/(?<=\d)\s+(?=\d)/g, '')
-    .replace(/(?<=\d)-(?=\d)/g, '');   // speech services insert hyphens between digit groups
-  const runs = normalized.replace(/\D+/g, ' ').trim().split(' ').filter(Boolean);
+    .replace(/(?<=[0-9X])\s+(?=[0-9X])/g, '')   // rejoin digit groups
+    .replace(/(?<=[0-9X])-+(?=[0-9X])/g, '');    // speech services insert hyphens
+  const runs = normalized.replace(/[^0-9X]+/g, ' ').trim().split(' ').filter(Boolean);
   // exact matches first (prefer the last)
   for (let i = runs.length - 1; i >= 0; i--) {
     const run = runs[i];
