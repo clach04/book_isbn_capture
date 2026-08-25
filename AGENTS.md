@@ -6,12 +6,17 @@ Allow non-ASCII only when the file's data semantics require it
 (e.g., person/place names, translations, fixtures, external-source text).
 Do not alter existing non-ASCII data unless explicitly asked.
 
+NEVER use `-` for bullet points. For bullets in text / Markdown ALWAYS use "2 spaces + asterisk + space", i.e. `  * `; continuation lines indent 4 spaces to align.
+
 Be ultra-concise and precise across all outputs. Prefer brevity over grammar.
+
+Comments ARE allowed in code. Be concise with them.
 
 Follow YAGNI. Prefer one-liners only when clarity is not reduced.
 
 If anything is unclear, ask a question before implementing.
 
+Use red/green TDD
 
 Prefer assertions with descriptive messages over try/catch.
 Use explicit type checks with no silent fallbacks; log actual vs expected types.
