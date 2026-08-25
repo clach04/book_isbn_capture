@@ -128,13 +128,20 @@
 </div>
 <div class="controls">
   <button id="fetchTitlesBtn">Fetch missing data</button>
+  <button id="importToggleBtn">Import</button>
+</div>
+<div id="importBox" hidden style="text-align:center;margin:0.5rem">
+  <textarea id="importText" rows="8" cols="60" placeholder="Paste exported CSV or newline-delimited ISBNs here"
+    style="background:#000;color:#eee;border:1px solid #555;border-radius:6px;padding:0.4rem;font-family:monospace"></textarea>
+  <br>
+  <button id="importApplyBtn">Import paste</button>
 </div>
 
 <div id="version" style="text-align:center;color:#666;font-size:0.75rem;margin-top:1rem"></div>
 
 <script>
 'use strict';
-const APP_VERSION = 'v0.0.26 (2026-08-23) - cleanNote dedupe for dictated notes (mobile speech garbage); test_note_cleanup.js fixtures'
+const APP_VERSION = 'v0.0.27 (2026-08-24) - CSV/text import (paste box, upsert merge, preview confirm); test_import.js'
 document.getElementById('version').textContent = APP_VERSION;
 
 
@@ -700,6 +707,120 @@ csvBtn.addEventListener('click', () => {
   URL.revokeObjectURL(a.href);
   setStatus('CSV downloaded.', true); successCue();
   markExported();
+});
+
+// ---------- Import ----------
+// Mirrored verbatim in test_import.js (keep in sync).
+
+// RFC 4180 single line: quoted fields, "" escape, commas in quotes.
+function parseCsvLine(line) {
+  const fields = [];
+  let cur = '', i = 0;
+  while (i < line.length) {
+    if (line[i] === '"') {
+      i++;
+      while (i < line.length) {
+        if (line[i] === '"') {
+          if (line[i + 1] === '"') { cur += '"'; i += 2; }
+          else { i++; break; }
+        } else cur += line[i++];
+      }
+    } else if (line[i] === ',') { fields.push(cur); cur = ''; i++; }
+    else cur += line[i++];
+  }
+  fields.push(cur);
+  return fields;
+}
+
+const IMPORT_HEADER = 'isbn_entered,isbn10,isbn13,title,authors,archiveorg_want,lookup,note,timestamp';
+
+// text -> { rows: captureRecords, errors: [{line, reason}] }.
+// Accepts full CSV (header optional) and bare newline-delimited ISBNs.
+function parseImportText(text, nowMs) {
+  const rows = [], errors = [];
+  const lines = text.split(/\r?\n/);
+  for (let n = 0; n < lines.length; n++) {
+    const raw = lines[n].trim();
+    if (!raw) continue;
+    if (n === 0 && raw.replace(/\s/g, '') === IMPORT_HEADER) continue;
+    const line = n + 1;
+    try {
+      if (!raw.includes(',')) {
+        // bare ISBN (copy-all export format)
+        const v = raw.replace(/[^0-9Xx]/g, '').toUpperCase();
+        if (!isValidIsbn(v)) throw new Error(`invalid ISBN checksum: "${raw}"`);
+        rows.push({ display: v, isbn13: v.length === 13 ? v : (isbn13From10(v) || ''),
+          isbn10: v.length === 13 ? (isbn10From13(v) || '') : v,
+          title: '', authors: '', want: 'pending', lookup: 'pending', note: '', ts: nowMs });
+        continue;
+      }
+      const f = parseCsvLine(raw);
+      if (f.length !== 9) throw new Error(`expected 9 columns, got ${f.length}`);
+      const [entered, , , title, authors, want, lookup, note, tsStr] = f;
+      const v = String(entered).replace(/[^0-9Xx]/g, '').toUpperCase();
+      if (!isValidIsbn(v)) throw new Error(`invalid ISBN checksum: "${entered}"`);
+      let ts = nowMs;
+      if (String(tsStr).trim() !== '') {
+        const p = Date.parse(tsStr);
+        if (Number.isNaN(p)) throw new Error(`unparsable timestamp: "${tsStr}"`);
+        ts = p;
+      }
+      rows.push({ display: v, isbn13: v.length === 13 ? v : (isbn13From10(v) || ''),
+        isbn10: v.length === 13 ? (isbn10From13(v) || '') : v,
+        title: String(title), authors: String(authors), want: String(want),
+        lookup: String(lookup), note: String(note), ts });
+    } catch (e) {
+      errors.push({ line, reason: e.message });
+    }
+  }
+  return { rows, errors };
+}
+
+// Upsert by isbn13, falling back to the derived-from-display isbn13, then
+// raw display. Imported row wins wholesale on match.
+function captureKey(c) { return c.isbn13 || isbn13From10(c.display) || c.display; }
+function mergeCaptures(existing, incoming) {
+  const out = existing.slice();
+  let added = 0, updated = 0;
+  for (const row of incoming) {
+    const key = captureKey(row);
+    const idx = out.findIndex(c => captureKey(c) === key);
+    if (idx >= 0) { out[idx] = row; updated++; }
+    else { out.push(row); added++; }
+  }
+  return { captures: out, added, updated };
+}
+
+const importToggleBtn = document.getElementById('importToggleBtn');
+const importBox = document.getElementById('importBox');
+const importText = document.getElementById('importText');
+const importApplyBtn = document.getElementById('importApplyBtn');
+importToggleBtn.addEventListener('click', () => {
+  importBox.hidden = !importBox.hidden;
+});
+importApplyBtn.addEventListener('click', () => {
+  const text = importText.value;
+  if (!text.trim()) { setStatus('Nothing to import.', false); errorCue(); return; }
+  const { rows, errors } = parseImportText(text, Date.now());
+  if (rows.length === 0) {
+    setStatus(`Import failed: ${errors.map(e => `line ${e.line} (${e.reason})`).join('; ')}`, false);
+    errorCue(); return;
+  }
+  // Two-step confirm: preview counts before overwriting anything.
+  const merged = mergeCaptures(captures, rows);
+  const msg = `This paste will add ${merged.added} and overwrite ${merged.updated} existing captures.`
+    + (errors.length ? ` Skipped ${errors.length} bad row(s): ${errors.map(e => `line ${e.line} (${e.reason})`).join('; ')}.` : '')
+    + ' Proceed?';
+  if (!confirm(msg)) { setStatus('Import cancelled.', true); return; }
+  captures = merged.captures;
+  saveCaptures();   // sets exported=false when data changed (added or updated > 0)
+  render();
+  importText.value = '';
+  importBox.hidden = true;
+  const pending = captures.filter(c => c.lookup === 'pending' || c.want === 'pending').length;
+  setStatus(`Imported: ${merged.added} added, ${merged.updated} updated.`
+    + (pending ? ` ${pending} capture(s) missing data - use Fetch missing data.` : ''), true);
+  successCue();
 });
 
 // ---------- Speech ----------

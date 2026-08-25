@@ -34,6 +34,14 @@ Deterministic single-digit reconstruction of a spoken/typed ISBN using its
 checksum. Unique per run, flagged "repaired — verify!". Exact matches always
 win over repairs.
 
+**Import**
+Bulk-adding captures by pasting previously exported text into an input
+box. Matches existing captures by ISBN-13; the imported row replaces the
+local one wholesale on match. Malformed or checksum-failing rows are
+skipped individually and reported, never repaired. Enrichment is not
+triggered by import. A preview states how many captures will be added vs
+overwritten before the user confirms.
+
 **Export**
 Copy-all (newline-delimited ISBN-13s) or CSV download. Clears the
 unexported-captures nag. CSV columns:
