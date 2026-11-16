@@ -11,6 +11,17 @@ Can be used for simple cataloging to CSV for import or sanity checking.
 Primary use case for this app was to check https://archive.org/want/?mode=donation_book
 to see if any books are missing from Archive.org collection.
 
+## Install as an app (PWA)
+
+The page is a PWA: `manifest.webmanifest` + `sw.js` (service worker) + `icons/`.
+Served over https or localhost, Chrome/Edge offer "Install app" (or Add to Home
+Screen on Android) and it then launches standalone and works offline. Service
+workers need a secure context, so plain `file://` or LAN-IP http skips
+registration (the app still runs, just not installably).
+
+`icons/icon.svg` is the source of truth; regenerate the PNG icons with
+`py -3 rasterize_icon.py` (needs Pillow) after changing it.
+
 ## Launch for local testing
 
 Speech recognition requires a secure context: `http://localhost` or `https://`.
@@ -88,6 +99,8 @@ Tips:
 ## Development
 
 - All logic lives inline in `index.html`
+- PWA: `manifest.webmanifest` + `sw.js` + `icons/`; bump the `APP_VERSION`
+  string in `index.html` **and** `APP_VERSION` in `sw.js` when either changes
 - Parser rules: utterance → normalize digit words ("nine"→9, "ex"→X) → rejoin
   split digit groups (spaces/hyphens) → take the LAST 10/13-char run passing
   checksum; text before it is kept as the note. No valid run → whole turn

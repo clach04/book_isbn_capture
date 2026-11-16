@@ -3,6 +3,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#2563eb">
+<meta name="description" content="Voice-first ISBN capture for cataloguing physical books.">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="ISBN Capture">
 <title>ISBN Capture</title>
 <style>
   :root { color-scheme: dark; }
@@ -141,7 +148,7 @@
 
 <script>
 'use strict';
-const APP_VERSION = 'v0.0.27 (2026-08-24) - CSV/text import (paste box, upsert merge, preview confirm); test_import.js'
+const APP_VERSION = 'v0.0.28 (2026-09-08) - PWA (manifest + service worker); CSV/text import (paste box, upsert merge, preview confirm); test_import.js'
 document.getElementById('version').textContent = APP_VERSION;
 
 
@@ -972,6 +979,14 @@ function closeScanner() {
   scanView.style.display = 'none';
 }
 scanClose.addEventListener('click', closeScanner);
+
+// ---------- PWA: service worker for offline launch ----------
+// Service workers need a secure context (https or localhost); the app still
+// runs fine online when registration is skipped.
+if ('serviceWorker' in navigator && (location.protocol === 'https:' ||
+    ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname))) {
+  navigator.serviceWorker.register('sw.js').catch(() => { /* non-fatal */ });
+}
 </script>
 </body>
 </html>
